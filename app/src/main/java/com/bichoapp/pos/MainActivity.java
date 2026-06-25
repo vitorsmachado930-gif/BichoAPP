@@ -1,19 +1,16 @@
 package com.bichoapp.pos;
 
-import android.Manifest;
-import android.app.DownloadManager;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.net.Uri;
-import android.net.http.SslError;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
-import android.os.Handler;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
+import android.net.http.SslError;
 import android.webkit.CookieManager;
 import android.webkit.SslErrorHandler;
 import android.webkit.WebChromeClient;
@@ -23,12 +20,10 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.ValueCallback;
-import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 public class MainActivity extends AppCompatActivity {
@@ -38,26 +33,27 @@ public class MainActivity extends AppCompatActivity {
     private LinearLayout offlineLayout;
     private DatabaseHelper db;
     private PrinterHelper printer;
+    private AndroidBridge bridge;
     private String currentUrl;
 
+    // Para seleção de arquivo (upload de foto/documento)
     private ValueCallback<Uri[]> fileUploadCallback;
     private static final int FILE_CHOOSER_REQUEST = 1001;
-    private static final int PERMISSION_REQUEST = 1002;
 
-    // Segurar 5 segundos no canto superior esquerdo → abre configurações
-    private final Handler longPressHandler = new Handler();
-    private final Runnable openConfigRunnable = this::openConfig;
-    private static final int LONG_PRESS_MS = 5000;
-    private static final int CORNER_PX = 120;
+    // Atalho secreto para configurações: 5 toques rápidos na tela
+    private int tapCount = 0;
+    private long lastTap = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        // Tela cheia - sem barra de status e navegação
         getWindow().setFlags(
             WindowManager.LayoutParams.FLAG_FULLSCREEN,
             WindowManager.LayoutParams.FLAG_FULLSCREEN
         );
+        // Mantém tela ligada
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         setContentView(R.layout.activity_main);
@@ -70,39 +66,14 @@ public class MainActivity extends AppCompatActivity {
         swipeRefresh = findViewById(R.id.swipe_refresh);
         offlineLayout = findViewById(R.id.offline_layout);
 
-        Button btnRetry = findViewById(R.id.btn_retry);
-        btnRetry.setOnClickListener(v -> {
-            offlineLayout.setVisibility(View.GONE);
-            webView.setVisibility(View.VISIBLE);
-            loadUrl(db.getUrl());
-        });
-
-        requestPermissions();
         setupWebView();
         setupSwipeRefresh();
 
-        AndroidBridge bridge = new AndroidBridge(this, printer, this::openConfig);
+        // Bridge JavaScript
+        bridge = new AndroidBridge(this, printer, this::openConfig);
         webView.addJavascriptInterface(bridge, "Android");
 
         loadUrl(currentUrl);
-    }
-
-    private void requestPermissions() {
-        String[] perms = {
-            Manifest.permission.CAMERA,
-            Manifest.permission.READ_EXTERNAL_STORAGE,
-            Manifest.permission.WRITE_EXTERNAL_STORAGE
-        };
-        boolean needRequest = false;
-        for (String p : perms) {
-            if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) {
-                needRequest = true;
-                break;
-            }
-        }
-        if (needRequest) {
-            ActivityCompat.requestPermissions(this, perms, PERMISSION_REQUEST);
-        }
     }
 
     private void setupWebView() {
@@ -119,30 +90,13 @@ public class MainActivity extends AppCompatActivity {
         settings.setDisplayZoomControls(false);
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
+
+        // User agent identifica como app nativo
         settings.setUserAgentString("BichoAppPOS/1.0 Android/" + Build.VERSION.RELEASE);
 
+        // Cookies persistentes
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
-
-        // Download de arquivos (PDFs, comprovantes)
-        webView.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> {
-            try {
-                DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
-                request.setMimeType(mimeType);
-                request.addRequestHeader("cookie", CookieManager.getInstance().getCookie(url));
-                request.setDescription("Baixando arquivo...");
-                request.setTitle(android.webkit.URLUtil.guessFileName(url, contentDisposition, mimeType));
-                request.allowScanningByMediaScanner();
-                request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-                request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,
-                    android.webkit.URLUtil.guessFileName(url, contentDisposition, mimeType));
-                DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
-                if (dm != null) dm.enqueue(request);
-            } catch (Exception e) {
-                // Abre no navegador como fallback
-                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
-            }
-        });
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -166,6 +120,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
+            // Aceita certificados SSL — resolve tela branca em dispositivos com SSL antigo
             @Override
             public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
                 handler.proceed();
@@ -174,15 +129,18 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
+                // Mantém navegação dentro do WebView para o domínio do app
+                // Links externos abrem no navegador
                 if (url.startsWith("tel:") || url.startsWith("mailto:")) {
                     startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
                     return true;
                 }
-                return false;
+                return false; // carrega no WebView
             }
         });
 
         webView.setWebChromeClient(new WebChromeClient() {
+            // Suporte para upload de arquivos (fotos, documentos)
             @Override
             public boolean onShowFileChooser(WebView webView,
                     ValueCallback<Uri[]> filePathCallback,
@@ -201,7 +159,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupSwipeRefresh() {
-        swipeRefresh.setColorSchemeColors(0xFF0f6b45);
+        swipeRefresh.setColorSchemeColors(0xFF0f6b45); // verde BichoApp
         swipeRefresh.setOnRefreshListener(() -> {
             if (webView.getUrl() != null) {
                 webView.reload();
@@ -227,29 +185,31 @@ public class MainActivity extends AppCompatActivity {
         startActivity(new Intent(this, ConfigActivity.class));
     }
 
+    // Botão físico Voltar → navega no WebView
     @Override
     public void onBackPressed() {
         if (webView.canGoBack()) {
             webView.goBack();
         }
+        // Se não pode voltar, não faz nada (não fecha o app)
     }
 
-    // Segurar 5 segundos no canto superior esquerdo (120x120px) → abre configurações
+    // 5 toques rápidos na tela (menos de 3s) → abre configurações
     @Override
     public boolean dispatchTouchEvent(android.view.MotionEvent ev) {
-        float x = ev.getX();
-        float y = ev.getY();
-        boolean inCorner = (x < CORNER_PX && y < CORNER_PX);
-
-        switch (ev.getAction()) {
-            case android.view.MotionEvent.ACTION_DOWN:
-                if (inCorner) longPressHandler.postDelayed(openConfigRunnable, LONG_PRESS_MS);
-                break;
-            case android.view.MotionEvent.ACTION_UP:
-            case android.view.MotionEvent.ACTION_CANCEL:
-            case android.view.MotionEvent.ACTION_MOVE:
-                longPressHandler.removeCallbacks(openConfigRunnable);
-                break;
+        if (ev.getAction() == android.view.MotionEvent.ACTION_DOWN) {
+            long now = System.currentTimeMillis();
+            if (now - lastTap < 3000) {
+                tapCount++;
+            } else {
+                tapCount = 1;
+            }
+            lastTap = now;
+            if (tapCount >= 5) {
+                tapCount = 0;
+                openConfig();
+                return true;
+            }
         }
         return super.dispatchTouchEvent(ev);
     }
@@ -257,7 +217,18 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
-            openConfig();
+            long now = System.currentTimeMillis();
+            if (now - lastTap < 2000) {
+                tapCount++;
+            } else {
+                tapCount = 1;
+            }
+            lastTap = now;
+            if (tapCount >= 3) {
+                tapCount = 0;
+                openConfig();
+                return true;
+            }
             return true;
         }
         return super.onKeyDown(keyCode, event);
@@ -266,20 +237,26 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == FILE_CHOOSER_REQUEST && fileUploadCallback != null) {
-            Uri[] results = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
-            fileUploadCallback.onReceiveValue(results);
-            fileUploadCallback = null;
+        if (requestCode == FILE_CHOOSER_REQUEST) {
+            if (fileUploadCallback != null) {
+                Uri[] results = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
+                fileUploadCallback.onReceiveValue(results);
+                fileUploadCallback = null;
+            }
         }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        // Sempre atualiza impressora ao voltar das configurações
+        printer = new PrinterHelper(this, db.getPrinter());
+        if (bridge != null) bridge.updatePrinter(printer);
+
+        // Recarrega URL se mudou
         String newUrl = db.getUrl();
         if (!newUrl.equals(currentUrl)) {
             currentUrl = newUrl;
-            printer = new PrinterHelper(this, db.getPrinter());
             loadUrl(currentUrl);
         }
     }

@@ -20,6 +20,13 @@ jobs:
       - name: Instalar Android SDK
         run: yes | sdkmanager "platforms;android-33" "build-tools;33.0.2" --sdk_root=$ANDROID_SDK_ROOT 2>/dev/null || true
 
+      - name: Remover BOM dos arquivos XML
+        run: |
+          find app/src/main -name "*.xml" -exec sed -i '1s/^\xEF\xBB\xBF//' {} \;
+          # Verifica se AndroidManifest.xml começa com <?xml
+          head -c 5 app/src/main/AndroidManifest.xml | xxd
+          head -c 5 app/src/main/res/layout/activity_config.xml | xxd
+
       - name: Garantir JitPack no settings.gradle
         run: |
           if ! grep -q "jitpack.io" settings.gradle; then

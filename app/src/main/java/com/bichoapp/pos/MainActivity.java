@@ -10,7 +10,9 @@ import android.os.Bundle;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
+import android.net.http.SslError;
 import android.webkit.CookieManager;
+import android.webkit.SslErrorHandler;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -33,24 +35,21 @@ public class MainActivity extends AppCompatActivity {
     private PrinterHelper printer;
     private String currentUrl;
 
-    // Para seleção de arquivo (upload de foto/documento)
     private ValueCallback<Uri[]> fileUploadCallback;
     private static final int FILE_CHOOSER_REQUEST = 1001;
 
-    // Atalho secreto para configurações: Volume Baixo 3x rápido
-    private int volumeDownCount = 0;
-    private long lastVolumeDown = 0;
+    // 5 toques rápidos na tela → abre configurações
+    private int tapCount = 0;
+    private long lastTap = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // Tela cheia - sem barra de status e navegação
         getWindow().setFlags(
             WindowManager.LayoutParams.FLAG_FULLSCREEN,
             WindowManager.LayoutParams.FLAG_FULLSCREEN
         );
-        // Mantém tela ligada
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         setContentView(R.layout.activity_main);
@@ -66,7 +65,6 @@ public class MainActivity extends AppCompatActivity {
         setupWebView();
         setupSwipeRefresh();
 
-        // Bridge JavaScript
         AndroidBridge bridge = new AndroidBridge(this, printer, this::openConfig);
         webView.addJavascriptInterface(bridge, "Android");
 
@@ -87,11 +85,8 @@ public class MainActivity extends AppCompatActivity {
         settings.setDisplayZoomControls(false);
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
-
-        // User agent identifica como app nativo
         settings.setUserAgentString("BichoAppPOS/1.0 Android/" + Build.VERSION.RELEASE);
 
-        // Cookies persistentes
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
 
@@ -118,20 +113,22 @@ public class MainActivity extends AppCompatActivity {
             }
 
             @Override
+            public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+                handler.proceed();
+            }
+
+            @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
-                // Mantém navegação dentro do WebView para o domínio do app
-                // Links externos abrem no navegador
                 if (url.startsWith("tel:") || url.startsWith("mailto:")) {
                     startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
                     return true;
                 }
-                return false; // carrega no WebView
+                return false;
             }
         });
 
         webView.setWebChromeClient(new WebChromeClient() {
-            // Suporte para upload de arquivos (fotos, documentos)
             @Override
             public boolean onShowFileChooser(WebView webView,
                     ValueCallback<Uri[]> filePathCallback,
@@ -150,7 +147,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupSwipeRefresh() {
-        swipeRefresh.setColorSchemeColors(0xFF0f6b45); // verde BichoApp
+        swipeRefresh.setColorSchemeColors(0xFF0f6b45);
         swipeRefresh.setOnRefreshListener(() -> {
             if (webView.getUrl() != null) {
                 webView.reload();
@@ -176,32 +173,48 @@ public class MainActivity extends AppCompatActivity {
         startActivity(new Intent(this, ConfigActivity.class));
     }
 
-    // Botão físico Voltar → navega no WebView
     @Override
     public void onBackPressed() {
         if (webView.canGoBack()) {
             webView.goBack();
         }
-        // Se não pode voltar, não faz nada (não fecha o app)
     }
 
-    // Volume Baixo 3x rápido (menos de 2s) → abre configurações
+    @Override
+    public boolean dispatchTouchEvent(android.view.MotionEvent ev) {
+        if (ev.getAction() == android.view.MotionEvent.ACTION_DOWN) {
+            long now = System.currentTimeMillis();
+            if (now - lastTap < 3000) {
+                tapCount++;
+            } else {
+                tapCount = 1;
+            }
+            lastTap = now;
+            if (tapCount >= 5) {
+                tapCount = 0;
+                openConfig();
+                return true;
+            }
+        }
+        return super.dispatchTouchEvent(ev);
+    }
+
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
             long now = System.currentTimeMillis();
-            if (now - lastVolumeDown < 2000) {
-                volumeDownCount++;
+            if (now - lastTap < 2000) {
+                tapCount++;
             } else {
-                volumeDownCount = 1;
+                tapCount = 1;
             }
-            lastVolumeDown = now;
-            if (volumeDownCount >= 3) {
-                volumeDownCount = 0;
+            lastTap = now;
+            if (tapCount >= 3) {
+                tapCount = 0;
                 openConfig();
                 return true;
             }
-            return true; // evita som de volume
+            return true;
         }
         return super.onKeyDown(keyCode, event);
     }
@@ -221,7 +234,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        // Recarrega se URL mudou nas configurações
         String newUrl = db.getUrl();
         if (!newUrl.equals(currentUrl)) {
             currentUrl = newUrl;

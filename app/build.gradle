@@ -1,37 +1,12 @@
 plugins {
-    id 'com.android.application'
+    id 'com.android.application' version '7.4.2' apply false
 }
 
-android {
-    namespace 'com.bichoapp.pos'
-    compileSdk 33
-
-    defaultConfig {
-        applicationId "com.bichoapp.pos"
-        minSdk 21
-        targetSdk 33
-        versionCode 1
-        versionName "1.0.0"
+// JitPack necessário para a biblioteca de impressão ESC/POS (dantsu)
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url 'https://jitpack.io' }
     }
-
-    buildTypes {
-        debug {
-            applicationIdSuffix ""
-            debuggable true
-        }
-        release {
-            minifyEnabled false
-            signingConfig signingConfigs.debug  // usa debug key para facilitar instalação
-        }
-    }
-
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
-    }
-}
-
-dependencies {
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
 }

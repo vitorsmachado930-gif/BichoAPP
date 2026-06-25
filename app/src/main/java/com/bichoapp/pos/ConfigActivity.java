@@ -1,5 +1,6 @@
 package com.bichoapp.pos;
 
+import android.graphics.Color;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.MenuItem;
@@ -38,12 +39,22 @@ public class ConfigActivity extends AppCompatActivity {
         Button btnSave   = findViewById(R.id.btn_save);
         Button btnVerify = findViewById(R.id.btn_verify_pin);
 
+        // Força texto preto em todos os campos (independente do tema do device)
+        editPin.setTextColor(Color.BLACK);
+        editPin.setHintTextColor(Color.GRAY);
+        editPin.setInputType(InputType.TYPE_CLASS_NUMBER); // mostra dígitos visíveis
+        editUrl.setTextColor(Color.BLACK);
+        editUrl.setHintTextColor(Color.GRAY);
+        editPrinter.setTextColor(Color.BLACK);
+        editPrinter.setHintTextColor(Color.GRAY);
+        editPrinter.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+
         // Campos bloqueados até autenticar
         editUrl.setEnabled(false);
         editPrinter.setEnabled(false);
         btnSave.setEnabled(false);
 
-        // Preenche com valores atuais (mascarados)
+        // Preenche com valores atuais
         editUrl.setText(db.getUrl());
         editPrinter.setText(db.getPrinter());
 

@@ -23,6 +23,40 @@ jobs:
         run: |
           yes | sdkmanager "platforms;android-33" "build-tools;33.0.2" --sdk_root=$ANDROID_SDK_ROOT 2>/dev/null || true
 
+      - name: Gerar ícone OperaNet
+        run: |
+          pip install pillow -q
+          python3 << 'EOF'
+          from PIL import Image, ImageDraw, ImageFont
+          import os
+
+          sizes = {'mdpi': 48, 'hdpi': 72, 'xhdpi': 96, 'xxhdpi': 144, 'xxxhdpi': 192}
+          for density, size in sizes.items():
+              path = f'app/src/main/res/mipmap-{density}'
+              os.makedirs(path, exist_ok=True)
+              # Fundo verde
+              img = Image.new('RGB', (size, size), color=(15, 107, 69))
+              draw = ImageDraw.Draw(img)
+              # Círculo branco ao fundo
+              margin = int(size * 0.08)
+              draw.ellipse([margin, margin, size-margin, size-margin], fill=(255,255,255,30))
+              # Texto "ON"
+              font_size = int(size * 0.42)
+              try:
+                  font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', font_size)
+              except:
+                  font = ImageFont.load_default()
+              text = 'ON'
+              bbox = draw.textbbox((0, 0), text, font=font)
+              tw = bbox[2] - bbox[0]
+              th = bbox[3] - bbox[1]
+              x = (size - tw) // 2 - bbox[0]
+              y = (size - th) // 2 - bbox[1]
+              draw.text((x, y), text, fill=(255, 255, 255), font=font)
+              img.save(f'{path}/ic_launcher.png')
+              print(f'Ícone gerado: {density} {size}x{size}px')
+          EOF
+
       - name: Instalar Gradle 7.5
         uses: gradle/actions/setup-gradle@v3
         with:
@@ -34,6 +68,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: BichoAppPOS
+          name: OperaNet
           path: app/build/outputs/apk/release/app-release.apk
           retention-days: 30

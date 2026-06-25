@@ -20,12 +20,30 @@ jobs:
       - name: Instalar Android SDK
         run: yes | sdkmanager "platforms;android-33" "build-tools;33.0.2" --sdk_root=$ANDROID_SDK_ROOT 2>/dev/null || true
 
-      - name: Remover BOM dos arquivos XML
+      - name: Corrigir XMLs corrompidos
         run: |
-          find app/src/main -name "*.xml" -exec sed -i '1s/^\xEF\xBB\xBF//' {} \;
-          # Verifica se AndroidManifest.xml começa com <?xml
-          head -c 5 app/src/main/AndroidManifest.xml | xxd
-          head -c 5 app/src/main/res/layout/activity_config.xml | xxd
+          python3 - << 'PYEOF'
+          import os
+
+          files = [
+            'app/src/main/AndroidManifest.xml',
+            'app/src/main/res/layout/activity_config.xml'
+          ]
+          for path in files:
+            with open(path, 'rb') as f:
+              data = f.read()
+            # Remove BOM UTF-8
+            if data.startswith(b'\xef\xbb\xbf'):
+              data = data[3:]
+            # Remove qualquer byte antes de '<'
+            idx = data.find(b'<')
+            if idx > 0:
+              print(f"AVISO: {path} tinha {idx} byte(s) antes do '<' — removendo")
+              data = data[idx:]
+            with open(path, 'wb') as f:
+              f.write(data)
+            print(f"OK: {path} — primeiros bytes: {data[:20]}")
+          PYEOF
 
       - name: Garantir JitPack no settings.gradle
         run: |

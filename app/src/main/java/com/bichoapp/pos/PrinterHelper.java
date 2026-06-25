@@ -50,22 +50,24 @@ public class PrinterHelper {
     /**
      * Imprime texto simples formatado
      * Chamado pelo JavaScript: Android.print(texto)
+     * Ordem: Bluetooth primeiro (se configurado), depois serial interna
      */
     public boolean printText(String text) {
         byte[] data = buildPrintData(text);
 
-        // Tenta porta serial interna primeiro (Golink V1 built-in)
-        for (String port : SERIAL_PORTS) {
-            if (printToSerial(port, data)) {
-                Log.d(TAG, "Imprimiu via serial: " + port);
-                return true;
-            }
-        }
-
-        // Fallback: Bluetooth
+        // Bluetooth primeiro quando endereço configurado (IposPrinter no Golink V1)
         if (bluetoothAddress != null && !bluetoothAddress.isEmpty()) {
             if (printToBluetooth(data)) {
                 Log.d(TAG, "Imprimiu via Bluetooth: " + bluetoothAddress);
+                return true;
+            }
+            Log.w(TAG, "Bluetooth falhou, tentando serial...");
+        }
+
+        // Fallback: porta serial interna
+        for (String port : SERIAL_PORTS) {
+            if (printToSerial(port, data)) {
+                Log.d(TAG, "Imprimiu via serial: " + port);
                 return true;
             }
         }

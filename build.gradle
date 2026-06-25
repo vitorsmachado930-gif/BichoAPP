@@ -1,3 +1,12 @@
 plugins {
     id 'com.android.application' version '7.4.2' apply false
 }
+
+// JitPack necessário para a biblioteca de impressão ESC/POS (dantsu)
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url 'https://jitpack.io' }
+    }
+}

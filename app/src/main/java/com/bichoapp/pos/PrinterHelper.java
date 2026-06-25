@@ -1,149 +1,152 @@
 package com.bichoapp.pos;
 
-import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothDevice;
-import android.bluetooth.BluetoothSocket;
 import android.content.Context;
 import android.util.Log;
 
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.util.UUID;
+import com.dantsu.escposprinter.EscPosPrinter;
+import com.dantsu.escposprinter.connection.bluetooth.BluetoothConnection;
+import com.dantsu.escposprinter.connection.bluetooth.BluetoothPrintersConnections;
+import com.dantsu.escposprinter.exceptions.EscPosConnectionException;
 
 /**
- * Impressão térmica para Golink V1 (impressora built-in 58mm)
- * Tenta 3 métodos na ordem:
- * 1. Porta serial interna (built-in printer via /dev/ttyS*)
- * 2. Bluetooth ESC/POS (impressora externa)
- * 3. Log de erro se ambos falharem
+ * Impressão térmica para Golink V1 (IposPrinter via Bluetooth)
+ * Usa a biblioteca dantsu/ESCPOS-ThermalPrinter-Android (mesma do app anterior)
+ *
+ * Configuração: endereço MAC da impressora salvo no SQLite (campo "impressora")
+ * Golink V1 — IposPrinter MAC: configurado pelo usuário nas configurações do app
  */
 public class PrinterHelper {
 
     private static final String TAG = "BichoAppPrinter";
-    private static final UUID SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 
-    // Portas seriais comuns em terminais POS Android genéricos
-    private static final String[] SERIAL_PORTS = {
-        "/dev/ttyS1", "/dev/ttyS2", "/dev/ttyS0",
-        "/dev/ttyMT1", "/dev/ttyMT2",
-        "/dev/printer"
-    };
+    // Largura em caracteres da impressora 58mm do Golink V1
+    private static final int CHARS_PER_LINE = 32;
+    // DPI padrão impressoras térmicas 58mm
+    private static final int PRINTER_DPI = 203;
+    // Largura em mm do papel 58mm (área útil ~48mm)
+    private static final float PAPER_WIDTH_MM = 48f;
 
     private final Context context;
     private final String bluetoothAddress;
 
-    // Comandos ESC/POS básicos
-    private static final byte[] CMD_INIT        = {0x1B, 0x40};           // ESC @ - inicializa
-    private static final byte[] CMD_ALIGN_CENTER= {0x1B, 0x61, 0x01};    // ESC a 1 - centraliza
-    private static final byte[] CMD_ALIGN_LEFT  = {0x1B, 0x61, 0x00};    // ESC a 0 - esquerda
-    private static final byte[] CMD_BOLD_ON     = {0x1B, 0x45, 0x01};    // ESC E 1 - negrito
-    private static final byte[] CMD_BOLD_OFF    = {0x1B, 0x45, 0x00};    // ESC E 0 - sem negrito
-    private static final byte[] CMD_FEED_CUT    = {0x1B, 0x64, 0x05, 0x1D, 0x56, 0x42, 0x00}; // 5 linhas + corte parcial
-    private static final byte[] CMD_LF          = {0x0A};                 // line feed
-
     public PrinterHelper(Context context, String bluetoothAddress) {
         this.context = context;
-        this.bluetoothAddress = bluetoothAddress;
+        this.bluetoothAddress = (bluetoothAddress != null) ? bluetoothAddress.trim() : "";
     }
 
     /**
-     * Imprime texto simples formatado
-     * Chamado pelo JavaScript: Android.print(texto)
-     * Ordem: Bluetooth primeiro (se configurado), depois serial interna
+     * Imprime texto formatado.
+     * Chamado pelo JavaScript: Android.print("texto")
      */
     public boolean printText(String text) {
-        byte[] data = buildPrintData(text);
-
-        // Bluetooth primeiro quando endereço configurado (IposPrinter no Golink V1)
-        if (bluetoothAddress != null && !bluetoothAddress.isEmpty()) {
-            if (printToBluetooth(data)) {
-                Log.d(TAG, "Imprimiu via Bluetooth: " + bluetoothAddress);
-                return true;
-            }
-            Log.w(TAG, "Bluetooth falhou, tentando serial...");
+        if (bluetoothAddress.isEmpty()) {
+            Log.e(TAG, "Endereço Bluetooth não configurado. Configure nas configurações do app.");
+            return false;
         }
 
-        // Fallback: porta serial interna
-        for (String port : SERIAL_PORTS) {
-            if (printToSerial(port, data)) {
-                Log.d(TAG, "Imprimiu via serial: " + port);
-                return true;
+        EscPosPrinter printer = null;
+        try {
+            BluetoothConnection connection = new BluetoothConnection(
+                android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+                    .getRemoteDevice(bluetoothAddress)
+            );
+
+            printer = new EscPosPrinter(connection, PRINTER_DPI, PAPER_WIDTH_MM, CHARS_PER_LINE);
+
+            // Converte texto simples para formato dantsu
+            String formatted = convertToEscPosFormat(text);
+            printer.printFormattedTextAndCut(formatted);
+
+            Log.d(TAG, "Impressão concluída via Bluetooth: " + bluetoothAddress);
+            return true;
+
+        } catch (EscPosConnectionException e) {
+            Log.e(TAG, "Erro de conexão Bluetooth: " + e.getMessage());
+            return false;
+        } catch (Exception e) {
+            Log.e(TAG, "Erro ao imprimir: " + e.getMessage());
+            return false;
+        } finally {
+            if (printer != null) {
+                try { printer.disconnectPrinter(); } catch (Exception ignored) {}
             }
         }
-
-        Log.e(TAG, "Falha ao imprimir: nenhum método funcionou");
-        return false;
     }
 
     /**
-     * Imprime bytes ESC/POS raw (recebidos como array de inteiros do JS)
-     * Chamado pelo JavaScript: Android.printRaw([...bytes])
+     * Imprime usando a primeira impressora Bluetooth pareada.
+     * Fallback quando endereço não configurado.
      */
-    public boolean printRaw(byte[] data) {
-        for (String port : SERIAL_PORTS) {
-            if (printToSerial(port, data)) return true;
-        }
-        if (bluetoothAddress != null && !bluetoothAddress.isEmpty()) {
-            return printToBluetooth(data);
-        }
-        return false;
-    }
-
-    private byte[] buildPrintData(String text) {
+    public boolean printTextFirstPaired(String text) {
+        EscPosPrinter printer = null;
         try {
-            byte[] textBytes = text.getBytes("UTF-8");
-            byte[] result = new byte[
-                CMD_INIT.length +
-                CMD_ALIGN_LEFT.length +
-                textBytes.length +
-                CMD_FEED_CUT.length
-            ];
-            int pos = 0;
-            System.arraycopy(CMD_INIT,       0, result, pos, CMD_INIT.length);       pos += CMD_INIT.length;
-            System.arraycopy(CMD_ALIGN_LEFT, 0, result, pos, CMD_ALIGN_LEFT.length); pos += CMD_ALIGN_LEFT.length;
-            System.arraycopy(textBytes,      0, result, pos, textBytes.length);       pos += textBytes.length;
-            System.arraycopy(CMD_FEED_CUT,   0, result, pos, CMD_FEED_CUT.length);
-            return result;
-        } catch (Exception e) {
-            return new byte[0];
-        }
-    }
+            BluetoothConnection connection = BluetoothPrintersConnections.selectFirstPaired();
+            if (connection == null) {
+                Log.e(TAG, "Nenhuma impressora Bluetooth pareada encontrada.");
+                return false;
+            }
 
-    private boolean printToSerial(String portPath, byte[] data) {
-        try {
-            FileOutputStream fos = new FileOutputStream(portPath);
-            fos.write(data);
-            fos.flush();
-            fos.close();
+            printer = new EscPosPrinter(connection, PRINTER_DPI, PAPER_WIDTH_MM, CHARS_PER_LINE);
+            String formatted = convertToEscPosFormat(text);
+            printer.printFormattedTextAndCut(formatted);
+
+            Log.d(TAG, "Impressão concluída via primeira impressora pareada.");
             return true;
-        } catch (Exception e) {
-            return false;
-        }
-    }
 
-    private boolean printToBluetooth(byte[] data) {
-        BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
-        if (adapter == null || !adapter.isEnabled()) return false;
-
-        BluetoothSocket socket = null;
-        try {
-            BluetoothDevice device = adapter.getRemoteDevice(bluetoothAddress);
-            socket = device.createRfcommSocketToServiceRecord(SPP_UUID);
-            adapter.cancelDiscovery();
-            socket.connect();
-            OutputStream out = socket.getOutputStream();
-            out.write(data);
-            out.flush();
-            Thread.sleep(500); // aguarda impressão
-            return true;
         } catch (Exception e) {
-            Log.e(TAG, "Erro Bluetooth: " + e.getMessage());
+            Log.e(TAG, "Erro ao imprimir (primeira pareada): " + e.getMessage());
             return false;
         } finally {
-            if (socket != null) {
-                try { socket.close(); } catch (IOException ignored) {}
+            if (printer != null) {
+                try { printer.disconnectPrinter(); } catch (Exception ignored) {}
             }
         }
+    }
+
+    /**
+     * Converte texto simples para o formato de marcação da biblioteca dantsu.
+     * O texto vindo do JavaScript é texto puro com quebras de linha.
+     */
+    private String convertToEscPosFormat(String text) {
+        if (text == null || text.isEmpty()) return "[L]\n";
+
+        StringBuilder sb = new StringBuilder();
+        String[] lines = text.split("\n");
+
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty()) {
+                sb.append("[L]\n");
+                continue;
+            }
+
+            // Linhas de separação (---) → linha cheia
+            if (trimmed.matches("[-=*]{3,}")) {
+                sb.append("[L]").append(trimmed).append("\n");
+                continue;
+            }
+
+            // Linhas com ":" no meio podem ser par chave:valor → duas colunas
+            if (trimmed.contains(":") && !trimmed.startsWith("http")) {
+                int colon = trimmed.indexOf(":");
+                String key = trimmed.substring(0, colon + 1).trim();
+                String val = trimmed.substring(colon + 1).trim();
+                if (!val.isEmpty() && key.length() < 20) {
+                    sb.append("[L]").append(key).append("[R]").append(val).append("\n");
+                    continue;
+                }
+            }
+
+            // Linha normal centralizada se curta (título), esquerda se longa
+            if (trimmed.length() <= 20 && (
+                trimmed.toUpperCase().equals(trimmed) ||
+                lines.length > 2 && trimmed.equals(lines[0].trim()))) {
+                sb.append("[C]").append(trimmed).append("\n");
+            } else {
+                sb.append("[L]").append(trimmed).append("\n");
+            }
+        }
+
+        return sb.toString();
     }
 }

@@ -92,7 +92,12 @@ public class MainActivity extends AppCompatActivity {
         settings.setUseWideViewPort(true);
 
         // User agent identifica como app nativo
-        settings.setUserAgentString("BichoAppPOS/1.0 Android/" + Build.VERSION.RELEASE);
+        String defaultUA = settings.getUserAgentString();
+   if (!defaultUA.contains("Mobile")) {
+       defaultUA = "Mozilla/5.0 (Linux; Android " + Build.VERSION.RELEASE
+           + ") AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
+   }
+   settings.setUserAgentString(defaultUA);
 
         // Cookies persistentes
         CookieManager.getInstance().setAcceptCookie(true);

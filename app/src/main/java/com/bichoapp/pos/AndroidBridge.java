@@ -43,6 +43,18 @@ public class AndroidBridge {
         return ok;
     }
 
+    /** Imprime uma pule já diagramada com a sintaxe ESC/POS da biblioteca. */
+    @JavascriptInterface
+    public boolean printFormatted(String formattedText) {
+        Log.d(TAG, "printFormatted() chamado");
+        boolean ok = printer.printFormattedReceipt(formattedText);
+        if (!ok) {
+            Log.w(TAG, "Falhou com MAC configurado, tentando primeira pareada...");
+            ok = printer.printFormattedReceiptFirstPaired(formattedText);
+        }
+        return ok;
+    }
+
     /**
      * Abre tela de configurações.
      * Uso no JS: Android.openConfig();

@@ -1,12 +1,14 @@
 package com.bichoapp.pos;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.util.Log;
 
 import com.dantsu.escposprinter.EscPosPrinter;
 import com.dantsu.escposprinter.connection.bluetooth.BluetoothConnection;
 import com.dantsu.escposprinter.connection.bluetooth.BluetoothPrintersConnections;
-import com.dantsu.escposprinter.exceptions.EscPosConnectionException;
+import com.dantsu.escposprinter.textparser.PrinterTextParserImg;
 
 /**
  * Impressão térmica para Golink V1 (IposPrinter via Bluetooth)
@@ -44,31 +46,15 @@ public class PrinterHelper {
             return false;
         }
 
-        EscPosPrinter printer = null;
         try {
             BluetoothConnection connection = new BluetoothConnection(
                 android.bluetooth.BluetoothAdapter.getDefaultAdapter()
                     .getRemoteDevice(bluetoothAddress)
             );
-
-            printer = new EscPosPrinter(connection, PRINTER_DPI, PAPER_WIDTH_MM, CHARS_PER_LINE);
-
-            String formatted = buildHeader(printer) + convertToEscPosFormat(text);
-            printer.printFormattedTextAndCut(formatted);
-
-            Log.d(TAG, "Impressão concluída via Bluetooth: " + bluetoothAddress);
-            return true;
-
-        } catch (EscPosConnectionException e) {
-            Log.e(TAG, "Erro de conexão Bluetooth: " + e.getMessage());
-            return false;
+            return printWithConnection(connection, buildHeader() + convertToEscPosFormat(text), false);
         } catch (Exception e) {
             Log.e(TAG, "Erro ao imprimir: " + e.getMessage());
             return false;
-        } finally {
-            if (printer != null) {
-                try { printer.disconnectPrinter(); } catch (Exception ignored) {}
-            }
         }
     }
 
@@ -77,7 +63,6 @@ public class PrinterHelper {
      * Fallback quando endereço não configurado.
      */
     public boolean printTextFirstPaired(String text) {
-        EscPosPrinter printer = null;
         try {
             BluetoothConnection connection = BluetoothPrintersConnections.selectFirstPaired();
             if (connection == null) {
@@ -85,15 +70,60 @@ public class PrinterHelper {
                 return false;
             }
 
-            printer = new EscPosPrinter(connection, PRINTER_DPI, PAPER_WIDTH_MM, CHARS_PER_LINE);
-            String formatted = buildHeader(printer) + convertToEscPosFormat(text);
-            printer.printFormattedTextAndCut(formatted);
-
-            Log.d(TAG, "Impressão concluída via primeira impressora pareada.");
-            return true;
+            return printWithConnection(connection, buildHeader() + convertToEscPosFormat(text), false);
 
         } catch (Exception e) {
             Log.e(TAG, "Erro ao imprimir (primeira pareada): " + e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean printFormattedReceipt(String formattedText) {
+        if (bluetoothAddress.isEmpty()) {
+            Log.e(TAG, "Endereço Bluetooth não configurado. Configure nas configurações do app.");
+            return false;
+        }
+
+        try {
+            BluetoothConnection connection = new BluetoothConnection(
+                android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+                    .getRemoteDevice(bluetoothAddress)
+            );
+            return printWithConnection(connection, formattedText, true);
+        } catch (Exception e) {
+            Log.e(TAG, "Erro ao preparar impressão formatada: " + e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean printFormattedReceiptFirstPaired(String formattedText) {
+        try {
+            BluetoothConnection connection = BluetoothPrintersConnections.selectFirstPaired();
+            if (connection == null) {
+                Log.e(TAG, "Nenhuma impressora Bluetooth pareada encontrada.");
+                return false;
+            }
+            return printWithConnection(connection, formattedText, true);
+        } catch (Exception e) {
+            Log.e(TAG, "Erro na impressão formatada pela primeira pareada: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean printWithConnection(
+            BluetoothConnection connection,
+            String formattedText,
+            boolean includeLogo
+    ) {
+        EscPosPrinter printer = null;
+        try {
+            printer = new EscPosPrinter(connection, PRINTER_DPI, PAPER_WIDTH_MM, CHARS_PER_LINE);
+            String logo = includeLogo ? buildLogo(printer) : "";
+            printer.printFormattedTextAndCut(logo + formattedText);
+            Log.d(TAG, "Impressão ESC/POS concluída.");
+            return true;
+        } catch (Exception e) {
+            Log.e(TAG, "Erro durante impressão ESC/POS: " + e.getMessage());
             return false;
         } finally {
             if (printer != null) {
@@ -105,8 +135,29 @@ public class PrinterHelper {
     /**
      * Monta o cabeçalho da impressão com nome do app centralizado e em negrito.
      */
-    private String buildHeader(EscPosPrinter printer) {
+    private String buildHeader() {
         return "[C]<b>BichoApp</b>\n";
+    }
+
+    private String buildLogo(EscPosPrinter printer) {
+        Bitmap original = null;
+        Bitmap scaled = null;
+        try {
+            original = BitmapFactory.decodeResource(context.getResources(), R.drawable.mascote);
+            if (original == null) return "";
+
+            int width = 128;
+            int height = Math.max(1, Math.round(original.getHeight() * (width / (float) original.getWidth())));
+            scaled = Bitmap.createScaledBitmap(original, width, height, true);
+            String hexadecimal = PrinterTextParserImg.bitmapToHexadecimalString(printer, scaled, false);
+            return hexadecimal.isEmpty() ? "" : "[C]<img>" + hexadecimal + "</img>\n";
+        } catch (Exception e) {
+            Log.w(TAG, "Logo não suportado; usando cabeçalho textual: " + e.getMessage());
+            return "";
+        } finally {
+            if (scaled != null && scaled != original) scaled.recycle();
+            if (original != null) original.recycle();
+        }
     }
 
     /**

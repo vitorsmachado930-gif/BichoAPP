@@ -142,6 +142,7 @@ public class PrinterHelper {
     private String buildLogo(EscPosPrinter printer) {
         Bitmap original = null;
         Bitmap scaled = null;
+        Bitmap withBg = null;
         try {
             original = BitmapFactory.decodeResource(context.getResources(), R.drawable.mascote);
             if (original == null) return "";
@@ -149,12 +150,20 @@ public class PrinterHelper {
             int width = 128;
             int height = Math.max(1, Math.round(original.getHeight() * (width / (float) original.getWidth())));
             scaled = Bitmap.createScaledBitmap(original, width, height, true);
-            String hexadecimal = PrinterTextParserImg.bitmapToHexadecimalString(printer, scaled, false);
+
+            // Compor sobre fundo branco para evitar fundo preto na impressão térmica
+            withBg = Bitmap.createBitmap(scaled.getWidth(), scaled.getHeight(), Bitmap.Config.ARGB_8888);
+            android.graphics.Canvas canvas = new android.graphics.Canvas(withBg);
+            canvas.drawColor(android.graphics.Color.WHITE);
+            canvas.drawBitmap(scaled, 0, 0, null);
+
+            String hexadecimal = PrinterTextParserImg.bitmapToHexadecimalString(printer, withBg, false);
             return hexadecimal.isEmpty() ? "" : "[C]<img>" + hexadecimal + "</img>\n";
         } catch (Exception e) {
             Log.w(TAG, "Logo não suportado; usando cabeçalho textual: " + e.getMessage());
             return "";
         } finally {
+            if (withBg != null) withBg.recycle();
             if (scaled != null && scaled != original) scaled.recycle();
             if (original != null) original.recycle();
         }

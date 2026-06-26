@@ -1,12 +1,15 @@
 package com.bichoapp.pos;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.util.Log;
 
 import com.dantsu.escposprinter.EscPosPrinter;
 import com.dantsu.escposprinter.connection.bluetooth.BluetoothConnection;
 import com.dantsu.escposprinter.connection.bluetooth.BluetoothPrintersConnections;
 import com.dantsu.escposprinter.exceptions.EscPosConnectionException;
+import com.dantsu.escposprinter.textparser.PrinterTextParserImg;
 
 /**
  * Impressão térmica para Golink V1 (IposPrinter via Bluetooth)
@@ -53,8 +56,7 @@ public class PrinterHelper {
 
             printer = new EscPosPrinter(connection, PRINTER_DPI, PAPER_WIDTH_MM, CHARS_PER_LINE);
 
-            // Converte texto simples para formato dantsu
-            String formatted = convertToEscPosFormat(text);
+            String formatted = buildHeader(printer) + convertToEscPosFormat(text);
             printer.printFormattedTextAndCut(formatted);
 
             Log.d(TAG, "Impressão concluída via Bluetooth: " + bluetoothAddress);
@@ -87,7 +89,7 @@ public class PrinterHelper {
             }
 
             printer = new EscPosPrinter(connection, PRINTER_DPI, PAPER_WIDTH_MM, CHARS_PER_LINE);
-            String formatted = convertToEscPosFormat(text);
+            String formatted = buildHeader(printer) + convertToEscPosFormat(text);
             printer.printFormattedTextAndCut(formatted);
 
             Log.d(TAG, "Impressão concluída via primeira impressora pareada.");
@@ -101,6 +103,25 @@ public class PrinterHelper {
                 try { printer.disconnectPrinter(); } catch (Exception ignored) {}
             }
         }
+    }
+
+    /**
+     * Monta o cabeçalho da impressão: mascote + nome do app.
+     * Se o drawable mascote.png estiver disponível, imprime a imagem.
+     */
+    private String buildHeader(EscPosPrinter printer) {
+        try {
+            Bitmap mascot = BitmapFactory.decodeResource(
+                context.getResources(), R.drawable.mascote);
+            if (mascot != null) {
+                String imgStr = PrinterTextParserImg.dithering(
+                    mascot, printer.getPrinterNbrCharactersPerLine());
+                return "[C]<img>" + imgStr + "</img>\n[C]<b>BichoApp</b>\n";
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Mascote não disponível: " + e.getMessage());
+        }
+        return "[C]<b>*** BichoApp ***</b>\n";
     }
 
     /**
@@ -128,9 +149,8 @@ public class PrinterHelper {
                 continue;
             }
 
-            // Cabeçalho: primeira linha não vazia com nome do app
-            if (i == 0 || (i <= 2 && !trimmed.contains(":"))) {
-                sb.append("[C]<b>").append(trimmed).append("</b>\n");
+            // Pula "BichoApp" do texto (já impresso pelo buildHeader com mascote)
+            if (trimmed.equalsIgnoreCase("BichoApp") || trimmed.equalsIgnoreCase("Bicho App")) {
                 continue;
             }
 

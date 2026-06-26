@@ -1,15 +1,12 @@
 package com.bichoapp.pos;
 
 import android.content.Context;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.util.Log;
 
 import com.dantsu.escposprinter.EscPosPrinter;
 import com.dantsu.escposprinter.connection.bluetooth.BluetoothConnection;
 import com.dantsu.escposprinter.connection.bluetooth.BluetoothPrintersConnections;
 import com.dantsu.escposprinter.exceptions.EscPosConnectionException;
-import com.dantsu.escposprinter.textparser.PrinterTextParserImg;
 
 /**
  * Impressão térmica para Golink V1 (IposPrinter via Bluetooth)
@@ -106,22 +103,10 @@ public class PrinterHelper {
     }
 
     /**
-     * Monta o cabeçalho da impressão: mascote + nome do app.
-     * Se o drawable mascote.png estiver disponível, imprime a imagem.
+     * Monta o cabeçalho da impressão com nome do app centralizado e em negrito.
      */
     private String buildHeader(EscPosPrinter printer) {
-        try {
-            Bitmap mascot = BitmapFactory.decodeResource(
-                context.getResources(), R.drawable.mascote);
-            if (mascot != null) {
-                String imgStr = PrinterTextParserImg.dithering(
-                    mascot, printer.getPrinterNbrCharactersPerLine());
-                return "[C]<img>" + imgStr + "</img>\n[C]<b>BichoApp</b>\n";
-            }
-        } catch (Exception e) {
-            Log.w(TAG, "Mascote não disponível: " + e.getMessage());
-        }
-        return "[C]<b>*** BichoApp ***</b>\n";
+        return "[C]<b>BichoApp</b>\n";
     }
 
     /**

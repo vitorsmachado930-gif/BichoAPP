@@ -88,7 +88,7 @@ public class MainActivity extends AppCompatActivity {
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setBuiltInZoomControls(false);
         settings.setDisplayZoomControls(false);
-        settings.setUseWideViewPort(true);
+        settings.setUseWideViewPort(false);
 
         // User agent identifica como app nativo
         String defaultUA = settings.getUserAgentString();

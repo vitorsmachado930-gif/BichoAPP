@@ -1,12 +1,6 @@
-This XML file does not appear to have any style information associated with it. The document tree is shown below.
+<?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:padding="24dp" android:background="#FFFFFF">
 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
-<!--  PIN  -->
-<TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="PIN de acesso" android:textSize="13sp" android:textColor="#64748b" android:layout_marginBottom="4dp"/>
-<LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginBottom="24dp">
-<EditText android:id="@+id/edit_pin" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:hint="Digite o PIN" android:inputType="number" android:maxLength="6" android:textSize="18sp" android:textColor="#000000" android:padding="12dp" android:background="@android:drawable/edit_text"/>
-<Button android:id="@+id/btn_verify_pin" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Verificar" android:layout_marginStart="8dp" android:backgroundTint="#0f6b45" android:textColor="#FFFFFF"/>
-</LinearLayout>
 <!--  URL  -->
 <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="URL do servidor" android:textSize="13sp" android:textColor="#64748b" android:layout_marginBottom="4dp"/>
 <EditText android:id="@+id/edit_url" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="https://bichoapp.com.br" android:inputType="textUri" android:textSize="16sp" android:textColor="#000000" android:padding="12dp" android:layout_marginBottom="8dp" android:background="@android:drawable/edit_text"/>

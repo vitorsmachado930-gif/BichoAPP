@@ -13,13 +13,9 @@ import androidx.appcompat.app.AppCompatActivity;
 
 public class ConfigActivity extends AppCompatActivity {
 
-    private static final String PIN = "1234"; // PIN padrão - pode alterar aqui
-
     private DatabaseHelper db;
     private EditText editUrl;
     private EditText editPrinter;
-    private EditText editPin;
-    private boolean authenticated = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -35,48 +31,20 @@ public class ConfigActivity extends AppCompatActivity {
         db = new DatabaseHelper(this);
         editUrl     = findViewById(R.id.edit_url);
         editPrinter = findViewById(R.id.edit_printer);
-        editPin     = findViewById(R.id.edit_pin);
         Button btnSave   = findViewById(R.id.btn_save);
-        Button btnVerify = findViewById(R.id.btn_verify_pin);
 
         // Força texto preto em todos os campos (independente do tema do device)
-        editPin.setTextColor(Color.BLACK);
-        editPin.setHintTextColor(Color.GRAY);
-        editPin.setInputType(InputType.TYPE_CLASS_NUMBER); // mostra dígitos visíveis
         editUrl.setTextColor(Color.BLACK);
         editUrl.setHintTextColor(Color.GRAY);
         editPrinter.setTextColor(Color.BLACK);
         editPrinter.setHintTextColor(Color.GRAY);
         editPrinter.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
 
-        // Campos bloqueados até autenticar
-        editUrl.setEnabled(false);
-        editPrinter.setEnabled(false);
-        btnSave.setEnabled(false);
-
         // Preenche com valores atuais
         editUrl.setText(db.getUrl());
         editPrinter.setText(db.getPrinter());
 
-        btnVerify.setOnClickListener(v -> {
-            String pin = editPin.getText().toString().trim();
-            if (pin.equals(PIN)) {
-                authenticated = true;
-                editUrl.setEnabled(true);
-                editPrinter.setEnabled(true);
-                btnSave.setEnabled(true);
-                editPin.setEnabled(false);
-                btnVerify.setEnabled(false);
-                Toast.makeText(this, "✓ Autenticado", Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(this, "PIN incorreto", Toast.LENGTH_SHORT).show();
-                editPin.setText("");
-            }
-        });
-
         btnSave.setOnClickListener(v -> {
-            if (!authenticated) return;
-
             String url = editUrl.getText().toString().trim();
             String printer = editPrinter.getText().toString().trim();
 

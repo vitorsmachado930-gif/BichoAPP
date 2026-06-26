@@ -40,9 +40,8 @@ public class MainActivity extends AppCompatActivity {
     private ValueCallback<Uri[]> fileUploadCallback;
     private static final int FILE_CHOOSER_REQUEST = 1001;
 
-    // Atalho secreto para configurações: 5 toques rápidos na tela
-    private int tapCount = 0;
-    private long lastTap = 0;
+    private int volumeKeyCount = 0;
+    private long lastVolumeKeyPress = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -198,38 +197,18 @@ public class MainActivity extends AppCompatActivity {
         // Se não pode voltar, não faz nada (não fecha o app)
     }
 
-    // 5 toques rápidos na tela (menos de 3s) → abre configurações
-    @Override
-    public boolean dispatchTouchEvent(android.view.MotionEvent ev) {
-        if (ev.getAction() == android.view.MotionEvent.ACTION_DOWN) {
-            long now = System.currentTimeMillis();
-            if (now - lastTap < 3000) {
-                tapCount++;
-            } else {
-                tapCount = 1;
-            }
-            lastTap = now;
-            if (tapCount >= 10) {
-                tapCount = 0;
-                openConfig();
-                return true;
-            }
-        }
-        return super.dispatchTouchEvent(ev);
-    }
-
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
             long now = System.currentTimeMillis();
-            if (now - lastTap < 2000) {
-                tapCount++;
+            if (now - lastVolumeKeyPress < 2000) {
+                volumeKeyCount++;
             } else {
-                tapCount = 1;
+                volumeKeyCount = 1;
             }
-            lastTap = now;
-            if (tapCount >= 3) {
-                tapCount = 0;
+            lastVolumeKeyPress = now;
+            if (volumeKeyCount >= 3) {
+                volumeKeyCount = 0;
                 openConfig();
                 return true;
             }

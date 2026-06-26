@@ -88,7 +88,6 @@ public class MainActivity extends AppCompatActivity {
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setBuiltInZoomControls(false);
         settings.setDisplayZoomControls(false);
-        settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
 
         // User agent identifica como app nativo
@@ -210,7 +209,7 @@ public class MainActivity extends AppCompatActivity {
                 tapCount = 1;
             }
             lastTap = now;
-            if (tapCount >= 5) {
+            if (tapCount >= 10) {
                 tapCount = 0;
                 openConfig();
                 return true;

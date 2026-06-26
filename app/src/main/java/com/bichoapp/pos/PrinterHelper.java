@@ -104,8 +104,8 @@ public class PrinterHelper {
     }
 
     /**
-     * Converte texto simples para o formato de marcação da biblioteca dantsu.
-     * O texto vindo do JavaScript é texto puro com quebras de linha.
+     * Converte texto da tela para formato ESC/POS da biblioteca dantsu.
+     * Reproduz o layout visual da pule: separadores, negrito, colunas alinhadas.
      */
     private String convertToEscPosFormat(String text) {
         if (text == null || text.isEmpty()) return "[L]\n";
@@ -113,40 +113,79 @@ public class PrinterHelper {
         StringBuilder sb = new StringBuilder();
         String[] lines = text.split("\n");
 
-        for (String line : lines) {
-            String trimmed = line.trim();
+        for (int i = 0; i < lines.length; i++) {
+            String trimmed = lines[i].trim();
+
+            // Linha vazia
             if (trimmed.isEmpty()) {
                 sb.append("[L]\n");
                 continue;
             }
 
-            // Linhas de separação (---) → linha cheia
-            if (trimmed.matches("[-=*]{3,}")) {
+            // Separadores tracejados (---) ou duplos (===) → imprime como está
+            if (trimmed.matches("[-]{3,}") || trimmed.matches("[=]{3,}")) {
                 sb.append("[L]").append(trimmed).append("\n");
                 continue;
             }
 
-            // Linhas com ":" no meio podem ser par chave:valor → duas colunas
-            if (trimmed.contains(":") && !trimmed.startsWith("http")) {
-                int colon = trimmed.indexOf(":");
-                String key = trimmed.substring(0, colon + 1).trim();
-                String val = trimmed.substring(colon + 1).trim();
-                if (!val.isEmpty() && key.length() < 20) {
-                    sb.append("[L]").append(key).append("[R]").append(val).append("\n");
+            // Cabeçalho: primeira linha não vazia com nome do app
+            if (i == 0 || (i <= 2 && !trimmed.contains(":"))) {
+                sb.append("[C]<b>").append(trimmed).append("</b>\n");
+                continue;
+            }
+
+            // TOTAL: → negrito com valor alinhado à direita
+            if (trimmed.startsWith("TOTAL:")) {
+                String valor = extrairValor(trimmed);
+                if (valor != null) {
+                    sb.append("[L]<b>TOTAL:</b>[R]<b>").append(valor).append("</b>\n");
+                } else {
+                    sb.append("[L]<b>").append(trimmed).append("</b>\n");
+                }
+                continue;
+            }
+
+            // Linhas de categoria em maiúsculas (GRUPO, MILHAR, CENTENA, DEZENA...) → negrito
+            if (trimmed.equals(trimmed.toUpperCase())
+                    && trimmed.length() > 4
+                    && !trimmed.matches("[\\d\\s\\-\\.\\,R\\$]+")) {
+                sb.append("[L]<b>").append(trimmed).append("</b>\n");
+                continue;
+            }
+
+            // Valor e Prêmio → chave à esquerda, R$ à direita
+            if (trimmed.contains("R$")) {
+                int idx = trimmed.lastIndexOf("R$");
+                String chave = trimmed.substring(0, idx).trim();
+                String valor = trimmed.substring(idx).trim();
+                if (!chave.isEmpty()) {
+                    sb.append("[L]").append(chave).append("[R]").append(valor).append("\n");
                     continue;
                 }
             }
 
-            // Linha normal centralizada se curta (título), esquerda se longa
-            if (trimmed.length() <= 20 && (
-                trimmed.toUpperCase().equals(trimmed) ||
-                lines.length > 2 && trimmed.equals(lines[0].trim()))) {
-                sb.append("[C]").append(trimmed).append("\n");
-            } else {
-                sb.append("[L]").append(trimmed).append("\n");
+            // Linhas com chave: valor simples (PULE, Data, Cambista...)
+            if (trimmed.contains(":") && !trimmed.startsWith("http")) {
+                int colon = trimmed.indexOf(":");
+                String chave = trimmed.substring(0, colon + 1).trim();
+                String valor = trimmed.substring(colon + 1).trim();
+                if (!valor.isEmpty() && chave.length() <= 20) {
+                    sb.append("[L]").append(chave).append(" ").append(valor).append("\n");
+                    continue;
+                }
             }
+
+            // Linha padrão à esquerda
+            sb.append("[L]").append(trimmed).append("\n");
         }
 
         return sb.toString();
+    }
+
+    /** Extrai "R$ XX,XX" do final de uma linha */
+    private String extrairValor(String linha) {
+        int idx = linha.lastIndexOf("R$");
+        if (idx >= 0) return linha.substring(idx).trim();
+        return null;
     }
 }

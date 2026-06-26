@@ -30,26 +30,17 @@ public class AndroidBridge {
     /**
      * Imprime texto simples.
      * Uso no JS: Android.print("Protocolo: 001\nValor: R$ 5,00\n");
+     * Tenta MAC configurado; se falhar, tenta primeira impressora Bluetooth pareada.
      */
     @JavascriptInterface
     public boolean print(String text) {
         Log.d(TAG, "print() chamado");
-        return printer.printText(text);
-    }
-
-    /**
-     * Imprime bytes ESC/POS em base64.
-     * Uso no JS: Android.printBase64("G0BAAAAAA..."); // base64 dos bytes ESC/POS
-     */
-    @JavascriptInterface
-    public boolean printBase64(String base64) {
-        try {
-            byte[] data = android.util.Base64.decode(base64, android.util.Base64.DEFAULT);
-            return printer.printRaw(data);
-        } catch (Exception e) {
-            Log.e(TAG, "Erro ao decodificar base64: " + e.getMessage());
-            return false;
+        boolean ok = printer.printText(text);
+        if (!ok) {
+            Log.w(TAG, "Falhou com MAC configurado, tentando primeira pareada...");
+            ok = printer.printTextFirstPaired(text);
         }
+        return ok;
     }
 
     /**
